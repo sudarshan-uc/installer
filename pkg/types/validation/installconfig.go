@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
+	operv1 "github.com/openshift/api/operator/v1"
 	"github.com/openshift/installer/pkg/ipnet"
 	"github.com/openshift/installer/pkg/types"
 	"github.com/openshift/installer/pkg/types/aws"
@@ -39,7 +40,7 @@ const (
 )
 
 // list of known plugins that require hostPrefix to be set
-var pluginsUsingHostPrefix = sets.NewString("OpenShiftSDN", "OVNKubernetes")
+var pluginsUsingHostPrefix = sets.NewString(string(operv1.NetworkTypeOpenShiftSDN), string(operv1.NetworkTypeOVNKubernetes))
 
 // ValidateInstallConfig checks that the specified install config is valid.
 func ValidateInstallConfig(c *types.InstallConfig) field.ErrorList {
@@ -179,7 +180,7 @@ func validateNetworkingIPVersion(n *types.Networking, p *types.Platform) field.E
 
 	switch {
 	case hasIPv4 && hasIPv6:
-		if n.NetworkType == "OpenShiftSDN" {
+		if n.NetworkType == string(operv1.NetworkTypeOpenShiftSDN) {
 			allErrs = append(allErrs, field.Invalid(field.NewPath("networking", "networkType"), n.NetworkType, "dual-stack IPv4/IPv6 is not supported for this networking plugin"))
 		}
 
@@ -206,7 +207,7 @@ func validateNetworkingIPVersion(n *types.Networking, p *types.Platform) field.E
 		}
 
 	case hasIPv6:
-		if n.NetworkType == "OpenShiftSDN" {
+		if n.NetworkType == string(operv1.NetworkTypeOpenShiftSDN) {
 			allErrs = append(allErrs, field.Invalid(field.NewPath("networking", "networkType"), n.NetworkType, "IPv6 is not supported for this networking plugin"))
 		}
 
@@ -451,21 +452,21 @@ func validateProxy(p *types.Proxy, fldPath *field.Path) field.ErrorList {
 	}
 	if p.HTTPProxy != "" {
 		if err := validate.URI(p.HTTPProxy); err != nil {
-			allErrs = append(allErrs, field.Invalid(field.NewPath("HTTPProxy"), p.HTTPProxy, err.Error()))
+			allErrs = append(allErrs, field.Invalid(fldPath.Child("httpProxy"), p.HTTPProxy, err.Error()))
 		}
 	}
 	if p.HTTPSProxy != "" {
 		if err := validate.URI(p.HTTPSProxy); err != nil {
-			allErrs = append(allErrs, field.Invalid(field.NewPath("HTTPSProxy"), p.HTTPSProxy, err.Error()))
+			allErrs = append(allErrs, field.Invalid(fldPath.Child("httpsProxy"), p.HTTPSProxy, err.Error()))
 		}
 	}
-	if p.NoProxy != "" {
-		for _, v := range strings.Split(p.NoProxy, ",") {
+	if p.NoProxy != "" && p.NoProxy != "*" {
+		for idx, v := range strings.Split(p.NoProxy, ",") {
 			v = strings.TrimSpace(v)
 			errDomain := validate.NoProxyDomainName(v)
 			_, _, errCIDR := net.ParseCIDR(v)
 			if errDomain != nil && errCIDR != nil {
-				allErrs = append(allErrs, field.Invalid(field.NewPath("NoProxy"), v, "must be a CIDR or domain, without wildcard characters"))
+				allErrs = append(allErrs, field.Invalid(fldPath.Child("noProxy").Index(idx), v, "must be a CIDR or domain, without wildcard characters"))
 			}
 		}
 	}
